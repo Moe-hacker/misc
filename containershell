@@ -1,0 +1,142 @@
+#!/data/data/com.termux/files/usr/bin/bash
+#Ignore ctrl-C.
+trap "" SIGINT
+#RGB color for output.
+RGB="166;227;161"
+#Defile output color.
+COLOR="\033[1;38;2;${RGB}m"
+#Adapt the screen resolution and make some output in the middle of the screen.
+LINE=$(($(($(stty size|awk '{print $2}')))/2-22))
+#Easter Egg.
+HOPPOU="\033[30m\033[${LINE}C               ▅▅▀▀▀▀▀▀▀▀▀▀▀▀▅
+\033[${LINE}C          ▅▅▀▀▀               ▀▀▅▅
+\033[${LINE}C     ▅▅▅▀▀            ▅           ▀▅
+\033[${LINE}C      ▅▀      ▅▀█▅▅▀▀▅▀▅        ▅▅  ▀▅
+\033[${LINE}C     ▅▀   █▅▀▀  ▀     ▀ ▀▀▅▅    █ ▀▀▅ █
+\033[${LINE}C    ▅▀   ▅▀  ▅▀      ▀▅    ▀▅   █▅███▀█
+\033[${LINE}C  ▅▅█▀▅ █ ▅▅▀          ▀▀   █   ████   █
+\033[${LINE}C      █ █ ▅▅▅▅▅        ▅▅▅▅▅ █  ▀█▀    █
+\033[${LINE}C      █ █▀ ▅▅▅ ▀      ▀ ▅▅▅ ▀█   █     █
+\033[${LINE}C      █ █ █\033[40;31m█▀█\033[0m\033[30m█        █\033[40;31m█▀█\033[0m\033[30m█ █   █     █
+\033[${LINE}C     █  █ █\033[31m███\033[30m█        █\033[31m███\033[30m█ █   █     ▀▅
+\033[${LINE}C    ▅▀  █  ▀▀▀          ▀▀▀  █   █      █
+\033[${LINE}C  ▅▀▅▀ █                     █   █      █
+\033[${LINE}C █   █ ▀▅ ▅▀▅   ▅▀▅   ▅▅     █   █      ▀▅
+\033[${LINE}C▅█▅▅██▅ ▅██  ▀███ ▅████ ▀▅█▀▅▀   █       ▀▅
+\033[${LINE}C███████ ▀██████████████████▀▀             █
+\033[${LINE}C █    ▀▅  ██▀ ▀██▀▀██▀▀██▀█     █▀         █
+\033[${LINE}C ▀▅     ▀▀█              ▅▀     █          █
+\033[${LINE}C   ▀▅    █               █     ██        ▅▀
+\033[${LINE}C     ▀▅▅▅▀                ▀▀▀▀▀ █        █
+\033[${LINE}C        ▀                       ▀        ▀
+"
+printf "${HOPPOU}"
+#Information.
+echo -e "${COLOR}ContainerShell for termux-container"
+echo -e "$(date)"
+echo -e "Copyright 2022 Moe-hacker"
+echo -e "「Keep moe,keep cool」"
+echo -e "There are no Easter Eggs in this script nya~"
+echo -e "For usage,just type \`help\`."
+echo ""
+#Help page.
+SHOW_HELPS(){
+  echo "Usage:"
+  echo "  help :show this page."
+  echo "  type [chroot-unshare/proot] :choose which type of container to build."
+  echo "  arch [architecture] :cross architecture,only for proot."
+  echo "  search [distro] [arch] :search for images of distro."
+  echo "  from [distro]:[version] :use the version of distro to build this container."
+  echo "  workdir [dir] :define where to store the container."
+  echo "  user [newuser] :add a new user."
+  echo "  password [password] :set password for new user."
+  echo "  create :create the container."
+  echo "  add [path-to-file/URL]:[path] :add a file to the container."
+  echo "  exec [command] [user] :exec a command."
+  echo "  save :save container."
+  echo "  commit [os]:[tag] :save container as an image."
+  echo "  login [user] :login to the container."
+  echo "  debug :exec shell commands in termux *Only for debugging."
+  echo "  exit/CTRL-D :exit containershell."
+}
+#Get cpu arch of device.
+GET_CPU_ARCH(){
+  DPKG_ARCH=$(dpkg --print-architecture)
+  case ${DPKG_ARCH} in
+    armel) export ARCH="armel" ;;
+    armv7* | armv8l | armhf | arm) export ARCH="armhf" ;;
+    aarch64 | arm64* | armv8* | arm*) export ARCH="arm64" ;;
+    i*86 | x86) export ARCH="i386" ;;
+    x86_64 | amd64) export ARCH="amd64" ;;
+    *) echo -e "\033[33mUnknow cpu architecture for this device !\033[0m"&&exit 1 ;;
+  esac
+  return 0
+}
+#Search lxc-image mirror for images.
+SEARCH_IMAGES(){
+  OS=$1
+  if [[ $2 = "" ]];then
+    GET_CPU_ARCH
+  else
+    ARCH=$2
+  fi
+  echo "For ParrotOS,please just use version \"current\"."
+  echo "Searching for images,this might take a while......"
+  if [[ $(curl -sL "http://images.linuxcontainers.org/images/$OS"|grep "404 Not Found") != "" ]];then
+    echo -e "\033[33mOS distro not found.\033[0m"
+    #Jump out,seems a little stupid.
+    CONTAINER_SHELL
+  fi
+  for i in $(curl -sL "http://images.linuxcontainers.org/images/$OS"|grep "DIR"|sed -E 's@<a (href)@\n\1@g'| awk -F 'href=' '{print $2}' | cut -d '"' -f 2 |cut -d "/" -f 1);do
+    if [[ $(curl -sL "http://images.linuxcontainers.org/images/$OS/$i/$ARCH"|grep "404 Not Found") = "" ]];then
+      found_arch=1
+      echo -e "\033[34m$OS [$ARCH] : $i"
+    fi
+  done
+  if [[ $found_arch != 1 ]];then
+    echo -e "\033[33mCould not found image for current cpu architecture,maybe you should choose another cpu architecture and use proot to run cross-arch container.\033[0m"
+  fi
+}
+#Only for debugging.
+DEBUG(){
+  echo "* This shell is only for debugging."
+  echo ""
+  bash
+}
+#Just call other functions here.
+CONTAINER_SHELL_MAIN(){
+  case $1 in
+    "help") SHOW_HELPS;;
+    "type") CONTAINER_TYPE $2;;
+    "search") SEARCH_IMAGES $2 $3;;
+    "from") USE_IMAGE $2;;
+    "workdir") DEFINE_WORKDIR $2;;
+    "user") DEFINE_USER $2;;
+    "password") CHANGE_PASSWORD $2;;
+    "create") CREATE_CONTAINER;;
+    "add") ADD_FILE $2;;
+    "exec") CONTAINER_EXEC $2 $3;;
+    "save") SAVE_CONFIG;;
+    "commit") SAVE_CONTAINER $2;;
+    "login") RUN_CONTAINER $2;;
+    "debug") DEBUG;;
+    "exit") echo -e "\nExit.\033[0m"&&exit;;
+    *) echo -e "\033[31mERR:Unknow command,type \`help\` to show helps.\033[0m"
+  esac
+}
+#Get commands.
+CONTAINER_SHELL(){
+  while :
+  do
+    printf "${COLOR}"
+    read -p "ContainerShell > " COMMAND
+    if [[ $? != 0 ]];then
+      echo -e "\n\nExit."
+      printf "\033[0m"
+      exit
+    fi
+    CONTAINER_SHELL_MAIN ${COMMAND}
+  done
+}
+#Main loop.
+CONTAINER_SHELL
