@@ -1,5 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
-#Ignore ctrl-C.
+#注释全是塑料英语，没基础的别看了。
+#咱就是说用着必应翻译写注释是什么感觉。
+#您可能看到：分体式设计，只调用其他函数的空壳函数，脑溢血功能实现
+#Ignore ctrl-C signal,because it's a shell-like console.
 trap "" SIGINT
 #RGB color for output.
 RGB="166;227;161"
@@ -7,7 +10,10 @@ RGB="166;227;161"
 COLOR="\033[1;38;2;${RGB}m"
 #Adapt the screen resolution and make some output in the middle of the screen.
 LINE=$(($(($(stty size|awk '{print $2}')))/2-22))
-#Easter Egg.
+#Greeting message.
+#There is no indentation here because it will cause bug of $HOPPOU and it's no need to do this. 
+CONSOLE_GREETING(){
+#An easter Egg.
 HOPPOU="\033[30m\033[${LINE}C               ▅▅▀▀▀▀▀▀▀▀▀▀▀▀▅
 \033[${LINE}C          ▅▅▀▀▀               ▀▀▅▅
 \033[${LINE}C     ▅▅▅▀▀            ▅           ▀▅
@@ -29,45 +35,44 @@ HOPPOU="\033[30m\033[${LINE}C               ▅▅▀▀▀▀▀▀▀▀▀▀
 \033[${LINE}C   ▀▅    █               █     ██        ▅▀
 \033[${LINE}C     ▀▅▅▅▀                ▀▀▀▀▀ █        █
 \033[${LINE}C        ▀                       ▀        ▀
+\033[${LINE}C           「Keep moe,keep cool」
 "
 printf "${HOPPOU}"
 #Information.
-echo -e "${COLOR}ContainerShell for termux-container"
+echo -e "${COLOR}Console of Termux-container"
 echo -e "$(date)"
+kernelVersion="$(uname -r)"
+kernelMajor="${kernelVersion%%.*}"
+kernelMinor="${kernelVersion#$kernelMajor.}"
+kernelMinor="${kernelMinor%%.*}"
+kernelMinor2="${kernelVersion#*$kernelMinor.}"
+kernelMinor2="${kernelMinor2%%-*}"
+echo -e "Linux kernel version: $kernelMajor.$kernelMinor.$kernelMinor2"
 echo -e "Copyright 2022 Moe-hacker"
-echo -e "「Keep moe,keep cool」"
-echo -e "There are no Easter Eggs in this script nya~"
-echo -e "For usage,just type \`help\`."
+echo -e "For usage,just type \`help\`"
 echo ""
-#Help page.
+}
+
+
+#Help page for container console.
+#TODO
 SHOW_HELPS(){
   echo "Usage:"
   echo "  help :show this page."
-  echo "  type [chroot-unshare/proot] :choose which type of container to build."
-  echo "  arch [architecture] :cross architecture,only for proot."
-  echo "  search [distro] [arch] :search for images of distro."
-  echo "  from [distro]:[version] :use the version of distro to build this container."
-  echo "  workdir [dir] :define where to store the container."
-  echo "  user [newuser] :add a new user."
-  echo "  password [password] :set password for new user."
-  echo "  create :create the container."
-  echo "  add [path-to-file/URL]:[path] :add a file to the container."
-  echo "  exec [command] [user] :exec a command."
-  echo "  save :save container."
-  echo "  commit [os]:[tag] :save container as an image."
-  echo "  login [user] :login to the container."
-  echo "  debug :exec shell commands in termux *Only for debugging."
   echo "  exit/CTRL-D :exit containershell."
 }
 #Get cpu arch of device.
 GET_CPU_ARCH(){
+  #A smart way to get cpu architecture from Tmoe
   DPKG_ARCH=$(dpkg --print-architecture)
   case ${DPKG_ARCH} in
     armel) export ARCH="armel" ;;
     armv7* | armv8l | armhf | arm) export ARCH="armhf" ;;
     aarch64 | arm64* | armv8* | arm*) export ARCH="arm64" ;;
+    #No need to write this,but we keep this part.
     i*86 | x86) export ARCH="i386" ;;
     x86_64 | amd64) export ARCH="amd64" ;;
+    #Exit here because we can't continue creating containers.
     *) echo -e "\033[33mUnknow cpu architecture for this device !\033[0m"&&exit 1 ;;
   esac
   return 0
@@ -84,59 +89,86 @@ SEARCH_IMAGES(){
   echo "Searching for images,this might take a while......"
   if [[ $(curl -sL "http://images.linuxcontainers.org/images/$OS"|grep "404 Not Found") != "" ]];then
     echo -e "\033[33mOS distro not found.\033[0m"
-    #Jump out,seems a little stupid.
-    CONTAINER_SHELL
+    #End this function with error code 1
+    return 1
   fi
+  #Search if the distro have current cpu arch support.
   for i in $(curl -sL "http://images.linuxcontainers.org/images/$OS"|grep "DIR"|sed -E 's@<a (href)@\n\1@g'| awk -F 'href=' '{print $2}' | cut -d '"' -f 2 |cut -d "/" -f 1);do
     if [[ $(curl -sL "http://images.linuxcontainers.org/images/$OS/$i/$ARCH"|grep "404 Not Found") = "" ]];then
       found_arch=1
       echo -e "\033[34m$OS [$ARCH] : $i"
     fi
   done
+  #Return an error message instead of none.
   if [[ $found_arch != 1 ]];then
     echo -e "\033[33mCould not found image for current cpu architecture,maybe you should choose another cpu architecture and use proot to run cross-arch container.\033[0m"
+    return 1
   fi
+  #return 0 if no errors is a good habit.
+  return 0
 }
-#Only for debugging.
-DEBUG(){
-  echo "* This shell is only for debugging."
-  echo ""
-  bash
+#An interface for debugging and getting root permissions.
+#We need to support devices without root and running all parts of the script with root permissions is no need,so we get root permissions here for functions needed.
+#Not a bug,if you haven't a better way to implement this function,just keep this.
+EXEC_FUNCTION(){
+  $@
 }
 #Just call other functions here.
-CONTAINER_SHELL_MAIN(){
+CONTAINER_CONSOLE_MAIN(){
   case $1 in
     "help") SHOW_HELPS;;
-    "type") CONTAINER_TYPE $2;;
     "search") SEARCH_IMAGES $2 $3;;
-    "from") USE_IMAGE $2;;
-    "workdir") DEFINE_WORKDIR $2;;
-    "user") DEFINE_USER $2;;
-    "password") CHANGE_PASSWORD $2;;
-    "create") CREATE_CONTAINER;;
-    "add") ADD_FILE $2;;
-    "exec") CONTAINER_EXEC $2 $3;;
-    "save") SAVE_CONFIG;;
-    "commit") SAVE_CONTAINER $2;;
     "login") RUN_CONTAINER $2;;
-    "debug") DEBUG;;
     "exit") echo -e "\nExit.\033[0m"&&exit;;
     *) echo -e "\033[31mERR:Unknow command,type \`help\` to show helps.\033[0m"
   esac
 }
-#Get commands.
-CONTAINER_SHELL(){
+#A loop.
+#Get commands to run.
+CONTAINER_CONSOLE(){
   while :
   do
     printf "${COLOR}"
-    read -p "ContainerShell > " COMMAND
+    read -p "Console > " COMMAND
+    #Catch EOF(CTRL-D) signals and exit normally.
     if [[ $? != 0 ]];then
       echo -e "\n\nExit."
       printf "\033[0m"
-      exit
+      exit 0
     fi
-    CONTAINER_SHELL_MAIN ${COMMAND}
+    #Call main function of the Console.
+    CONTAINER_CONSOLE_MAIN ${COMMAND}
   done
 }
-#Main loop.
-CONTAINER_SHELL
+#Usage of script `container`
+SHOW_USAGE(){
+  LINE=$(($(($(stty size|awk '{print $2}')))/2-23))
+  echo -e "\033[${LINE}C              \e[38;5;157m┌───────────┐"
+  echo -e "\033[${LINE}C              │ ┌───────┐ │"
+  echo -e "\033[${LINE}C              │ │  \e[38;5;227m┌───────────┐"
+  echo -e "\033[${LINE}C              \e[38;5;157m│ │  \e[38;5;227m│ ┌───────┐ │"
+  echo -e "\033[${LINE}C              \e[38;5;157m│ │  \e[38;5;227m│ │  \e[38;5;157m│ │  \e[38;5;227m│ │"
+  echo -e "\033[${LINE}C              \e[38;5;157m│ └──\e[38;5;227m│ │\e[38;5;157m──┘ │  \e[38;5;227m│ │"
+  echo -e "\033[${LINE}C              \e[38;5;157m└────\e[38;5;227m│ │\e[38;5;157m────┘  \e[38;5;227m│ │"
+  echo -e "\033[${LINE}C                   \e[38;5;227m│ └───────┘ │"
+  echo -e "\033[${LINE}C                   \e[38;5;227m└───────────┘"
+  echo -e "\033[${LINE}C${COLOR}═╔╝╔═╝╔═║╔╔ ║ ║║ ║  ╔═╝╔═║╔═ ═╔╝╔═║╝╔═ ╔═╝╔═║"
+  echo -e "\033[${LINE}C ║ ╔═╝╔╔╝║║║║ ║ ╝ ═╝║  ║ ║║ ║ ║ ╔═║║║ ║╔═╝╔╔╝"
+  echo -e "\033[${LINE}C ╝ ══╝╝ ╝╝╝╝══╝╝ ╝  ══╝══╝╝ ╝ ╝ ╝ ╝╝╝ ╝══╝╝ ╝"
+  SIZE=$(stty size|awk '{print $2}')
+  let SIZE=$(($SIZE))
+  echo -e "\e[1;48;5;2;${RGB}m$(yes " "|sed $SIZE'q'|tr -d '\n')\033[0m"
+  echo -e "${COLOR}Usage:"
+  echo -e " container                       #Start container console."
+  echo -e " container -h                    #Show this page"
+  echo -e " container -b [Containerfile]    #Build a container using Containerfile."
+  echo -e " container -e [function]         #exec function in this script *NOT for user."
+}
+#The script start running here.
+case $1 in
+    "-h") SHOW_USAGE;;
+    "-e") EXEC_FUNCTION ${@:2};;
+    "-b") CONTAINER_BUILD $2;;
+    "") CONSOLE_GREETING&&CONTAINER_CONSOLE;;
+    *) SHOW_USAGE&&exit 1;;
+esac

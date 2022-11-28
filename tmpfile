@@ -1,0 +1,24 @@
+echo "  type [chroot-unshare/proot] :choose which type of container to build."
+  echo "  arch [architecture] :cross architecture,only for proot."
+  echo "  search [distro] [arch] :search for images of distro."
+  echo "  from [distro]:[version] :use the version of distro to build this container."
+  echo "  workdir [dir] :define where to store the container."
+  echo "  user [newuser] :add a new user."
+  echo "  password [password] :set password for new user."
+  echo "  create :create the container."
+  echo "  add [path-to-file/URL]:[path] :add a file to the container."
+  echo "  exec [command] [user] :exec a command."
+  echo "  save :save container."
+  echo "  commit [os]:[tag] :save container as an image."
+  echo "  login [user] :login to the container."
+  "type") CONTAINER_TYPE $2;;
+   "from") USE_IMAGE $2;;
+    "workdir") DEFINE_WORKDIR $2;;
+    "user") DEFINE_USER $2;;
+    "password") CHANGE_PASSWORD $2;;
+    "create") CREATE_CONTAINER;;
+    "add") ADD_FILE $2;;
+    "exec") CONTAINER_EXEC $2 $3;;
+    "save") SAVE_CONFIG;;
+    "commit") SAVE_CONTAINER $2;;
+    "login") RUN_CONTAINER $2;;
