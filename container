@@ -2,6 +2,7 @@
 #注释全是塑料英语，没基础的别看了。
 #咱就是说用着必应翻译写注释是什么感觉。
 #您可能看到：分体式设计，只调用其他函数的空壳函数，脑溢血功能实现
+#c语言实现在学习了
 #Ignore ctrl-C signal,because it's a shell-like console.
 trap "" SIGINT
 #RGB color for output.
