@@ -9,8 +9,67 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
 #define CHROOT_DIR "/data/alpine"
 #define BINARY_PATH "./a.out"
+void show_n_char(int num){
+  char *space=" ";
+  int count;
+  for (count = 1; count <= num; count++){
+    putchar(space[0]);
+  }
+}
+void greeting(){
+  struct winsize size;
+  ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
+  short row=size.ws_col;
+  row-=44;
+  row/=2;
+  show_n_char(row);
+  printf("%s\n","\033[30m               ▅▅▀▀▀▀▀▀▀▀▀▀▀▀▅          ");
+  show_n_char(row);
+  printf("%s\n","          ▅▅▀▀▀               ▀▀▅▅      ");
+  show_n_char(row);
+  printf("%s\n","     ▅▅▅▀▀            ▅           ▀▅    ");
+  show_n_char(row);
+  printf("%s\n","      ▅▀      ▅▀█▅▅▀▀▅▀▅        ▅▅  ▀▅  ");
+  show_n_char(row);
+  printf("%s\n","     ▅▀   █▅▀▀  ▀     ▀ ▀▀▅▅    █ ▀▀▅ █ ");
+  show_n_char(row);
+  printf("%s\n","    ▅▀   ▅▀  ▅▀      ▀▅    ▀▅   █▅███▀█ ");
+  show_n_char(row);
+  printf("%s\n","  ▅▅█▀▅ █ ▅▅▀          ▀▀   █   ████   █");
+  show_n_char(row);
+  printf("%s\n","      █ █ ▅▅▅▅▅        ▅▅▅▅▅ █  ▀█▀    █");
+  show_n_char(row);
+  printf("%s\n","      █ █▀ ▅▅▅ ▀      ▀ ▅▅▅ ▀█   █     █");
+  show_n_char(row);
+  printf("%s\n","      █ █ █\033[40;31m█▀█\033[0m\033[30m█        █\033[40;31m█▀█\033[0m\033[30m█ █   █     █   ");
+  show_n_char(row);
+  printf("%s\n","     █  █ █\033[31m███\033[30m█        █\033[31m███\033[30m█ █   █     ▀▅   ");
+  show_n_char(row);
+  printf("%s\n","    ▅▀  █  ▀▀▀          ▀▀▀  █   █      █   ");
+  show_n_char(row);
+  printf("%s\n","  ▅▀▅▀ █                     █   █      █   ");
+  show_n_char(row);
+  printf("%s\n"," █   █ ▀▅ ▅▀▅   ▅▀▅   ▅▅     █   █      ▀▅  ");
+  show_n_char(row);
+  printf("%s\n","▅█▅▅██▅ ▅██  ▀███ ▅████ ▀▅█▀▅▀   █       ▀▅ ");
+  show_n_char(row);
+  printf("%s\n","███████ ▀██████████████████▀▀             █ ");
+  show_n_char(row);
+  printf("%s\n"," █    ▀▅  ██▀ ▀██▀▀██▀▀██▀█     █▀         █");
+  show_n_char(row);
+  printf("%s\n"," ▀▅     ▀▀█              ▅▀     █          █");
+  show_n_char(row);
+  printf("%s\n","   ▀▅    █               █     ██        ▅▀ ");
+  show_n_char(row);
+  printf("%s\n","     ▀▅▅▅▀                ▀▀▀▀▀ █        █  ");
+  show_n_char(row);
+  printf("%s\n","        ▀                       ▀        ▀  ");
+  show_n_char(row);
+  printf("%s\n","           「Keep moe,keep cool」           ");
+}
 void unshare_container(){
   chroot(CHROOT_DIR);
   chdir("/");
@@ -83,6 +142,7 @@ int main(){
   }
   int pid=fork();
   if (pid==0) {
+    greeting();
     unshare_container();
   }
   waitpid(pid, NULL, 0);
