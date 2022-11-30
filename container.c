@@ -16,6 +16,7 @@
 #include <sys/types.h>
 //need to be linked with `-lcap`.
 #include <sys/capability.h>
+#define UNSHARE 0
 //For debugging,set it to `./a.out`.
 //I will find a better way to get root permissions or use shell to implement. 
 #define BINARY_PATH "./a.out"
@@ -81,7 +82,7 @@ void greeting(){
   printf("%s\n","           「Keep moe,keep cool」");
 }
 //Run unshare container.
-void unshare_container(char *CONTAINER_DIR){
+void chroot_container(char *CONTAINER_DIR){
   //chroot into container.
   chroot(CONTAINER_DIR);
   chdir("/");
@@ -171,28 +172,38 @@ int main(int argc,char **argv){
     //We should exit here to avoid running the following part without root permissions.
     exit(0);
   }
-  //Try to create namespaces with unshare().
-  if(unshare(CLONE_NEWNS) == -1){
-    printf("Seems that mount namespace is not supported on this device\n");
+  if (UNSHARE==1){
+    //Try to create namespaces with unshare().
+    if(unshare(CLONE_NEWNS) == -1){
+      printf("Seems that mount namespace is not supported on this device\n");
+    }
+    if(unshare(CLONE_NEWUTS) == -1){
+      printf("Seems that uts namespace is not supported on this device\n");
+    }
+    if(unshare(CLONE_NEWIPC) == -1){
+      printf("Seems that ipc namespace is not supported on this device\n");
+    }
+    if(unshare(CLONE_NEWPID) == -1){
+      printf("Seems that pid namespace is not supported in this host\n");
+    }
+    if(unshare(CLONE_FILES) == -1){
+      printf("Seems that we could not unshare fds\n");
+    }
+    if(unshare(CLONE_FS) == -1){
+      printf("Seems that we could not unshare filesystem information.\n");
+    }
+    //Fork itself into namespace.
+    //This can fix 'can't fork: out of memory` issue.
+    int pid=fork();
+    //Run container in the forked process.
+    if (pid==0) {
+      greeting();
+      chroot_container(argv[1]);
+    }
+    //Fix `can't access tty` issue.
+    waitpid(pid, NULL, 0);
+  }else{
+    chroot_container(argv[1]);
   }
-  if(unshare(CLONE_NEWUTS) == -1){
-    printf("Seems that uts namespace is not supported on this device\n");
-  }
-  if(unshare(CLONE_NEWIPC) == -1){
-    printf("Seems that ipc namespace is not supported on this device\n");
-  }
-  if(unshare(CLONE_NEWPID) == -1){
-    printf("Seems that pid namespace is not supported in this host\n");
-  }
-  //Fork itself into namespace.
-  //This can fix 'can't fork: out of memory` issue.
-  int pid=fork();
-  //Run container in the forked process.
-  if (pid==0) {
-    greeting();
-    unshare_container(argv[1]);
-  }
-  //Fix `can't access tty` issue.
-  waitpid(pid, NULL, 0);
   return 0;
 }
