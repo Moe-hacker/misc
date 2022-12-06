@@ -1,20 +1,9 @@
 #!/data/data/com.termux/files/usr/bin/bash
-#注释全是塑料英语，没基础的别看了。
-#咱就是说用着必应翻译写注释是什么感觉。
-#您可能看到：分体式设计，只调用其他函数的空壳函数，脑溢血功能实现
-#c语言实现在学习了
-#Ignore ctrl-C signal,because it's a shell-like console.
-trap "" SIGINT
-#RGB color for output.
-RGB="166;227;161"
-#Defile output color.
+trap "CONTAINER_CONSOLE" SIGINT
+RGB="254;228;208"
 COLOR="\033[1;38;2;${RGB}m"
-#Adapt the screen resolution and make some output in the middle of the screen.
 LINE=$(($(($(stty size|awk '{print $2}')))/2-22))
-#Greeting message.
-#There is no indentation here because it will cause bug of $HOPPOU and it's no need to do this. 
 CONSOLE_GREETING(){
-#An easter Egg.
 HOPPOU="\033[30m\033[${LINE}C               ▅▅▀▀▀▀▀▀▀▀▀▀▀▀▅
 \033[${LINE}C          ▅▅▀▀▀               ▀▀▅▅
 \033[${LINE}C     ▅▅▅▀▀            ▅           ▀▅
@@ -39,46 +28,174 @@ HOPPOU="\033[30m\033[${LINE}C               ▅▅▀▀▀▀▀▀▀▀▀▀
 \033[${LINE}C           「Keep moe,keep cool」
 "
 printf "${HOPPOU}"
-#Information.
 echo -e "${COLOR}Console of Termux-container"
 echo -e "$(date)"
 kernelVersion="$(uname -r)"
 kernelMajor="${kernelVersion%%.*}"
 kernelMinor="${kernelVersion#$kernelMajor.}"
 kernelMinor="${kernelMinor%%.*}"
-kernelMinor2="${kernelVersion#*$kernelMinor.}"
-kernelMinor2="${kernelMinor2%%-*}"
-echo -e "Linux kernel version: $kernelMajor.$kernelMinor.$kernelMinor2"
+kernelPatch="${kernelVersion#*$kernelMinor.}"
+kernelPatch="${kernelPatch%%-*}"
+echo -e "Linux kernel version: $kernelMajor.$kernelMinor.$kernelPatch"
 echo -e "Copyright 2022 Moe-hacker"
 echo -e "For usage,just type \`help\`"
 echo ""
 }
-
-
-#Help page for container console.
-#TODO
+is_value(){
+  ([[ $1 == $2 ]]&&return 0)||return 1
+}
 SHOW_HELPS(){
   echo "Usage:"
   echo "  help :show this page."
   echo "  exit/CTRL-D :exit containershell."
 }
-#Get cpu arch of device.
 GET_CPU_ARCH(){
-  #A smart way to get cpu architecture from Tmoe
   DPKG_ARCH=$(dpkg --print-architecture)
   case ${DPKG_ARCH} in
     armel) export ARCH="armel" ;;
     armv7* | armv8l | armhf | arm) export ARCH="armhf" ;;
     aarch64 | arm64* | armv8* | arm*) export ARCH="arm64" ;;
-    #No need to write this,but we keep this part.
     i*86 | x86) export ARCH="i386" ;;
     x86_64 | amd64) export ARCH="amd64" ;;
-    #Exit here because we can't continue creating containers.
-    *) echo -e "\033[33mUnknow cpu architecture for this device !\033[0m"&&exit 1 ;;
+    *) echo -e "\033[31mUnknow cpu architecture for this device !\033[0m"&&exit 1 ;;
   esac
   return 0
 }
-#Search lxc-image mirror for images.
+PULL_ROOTFS(){
+  OS=$(echo $1|cut -d ":" -f 1)
+  VERSION=$(echo $1|cut -d ":" -f 2)
+  if [[ $2 = "" ]];then
+    GET_CPU_ARCH
+  else
+    ARCH=$2
+  fi
+  if [[ -e $PREFIX/var/container/${OS}-${VERSION}-${ARCH}.tar.xz ]];then
+    echo -e "\033[31mError: Rootfs already exists !"
+    return 1
+  fi
+  if [[ $OS != "parrot" ]];then
+    MIRROR="http://images.linuxcontainers.org/images"
+    if [[ $OS = "gentoo" ]];then
+        VERSION2="openrc"
+    else
+      VERSION2="default"
+    fi
+    TIME=$(curl -sL ${MIRROR}/${OS}/${VERSION}/${ARCH}/${VERSION2}|grep "DIR" |sed -E 's@<a (href)@\n\1@g'| awk -F 'href=' '{print $2}' | cut -d '"' -f 2 |cut -d "/" -f 2|tail -n 1)
+    if [[ ${TIME} = "" ]];then
+      echo -e "\033[31mError: Can not find rootfs !"
+      return 1
+    fi
+    URL=${MIRROR}/${OS}/${VERSION}/${ARCH}/${VERSION2}/${TIME}/rootfs.tar.xz
+    rm -rf $PREFIX/tmp/container
+    mkdir -p $PREFIX/tmp/container
+    [[ -e $PREFIX/var/container ]]||mkdir -p $PREFIX/var/container
+    cd $PREFIX/tmp/container
+    axel -n16 ${URL}
+    if [[ $? != 0 ]];then
+      echo -e "\033[31mError: Failed to download rootfs !"
+      return 1
+    fi
+    mv rootfs.tar.xz $PREFIX/var/container/${OS}-${VERSION}-${ARCH}.tar.xz
+  else
+    ROOTFS=$(curl -sL https://mirrors.bfsu.edu.cn/parrot/iso/testing/|grep title|sed -E 's@<a (href)@\n\1@g'| awk -F 'href=' '{print $2}' | cut -d '"' -f 2|tail -n +5|grep ".tar.xz"|grep ${ARCH}|head -n 1)
+    if [[ ${ROOTFS} = "" ]];then
+      echo -e "\033[31mError: Can not find rootfs !"
+      return 1
+    fi
+    URL="https://mirrors.bfsu.edu.cn/parrot/iso/testing/${ROOTFS}"
+    rm -rf $PREFIX/tmp/container
+    mkdir -p $PREFIX/tmp/container
+    [[ -e $PREFIX/var/container ]]||mkdir -p $PREFIX/var/container
+    cd $PREFIX/tmp/container
+    axel -n16 ${URL}
+    tar -xvf ${ROOTFS}
+    cd parrot-${ARCH}
+    tar -cvJf ../rootfs.tar.xz .
+    cd ..
+    rm ${ROOTFS}
+    rm -rf parrot-${ARCH}
+    mv rootfs.tar.xz $PREFIX/var/container/parrot-current-${ARCH}.tar.xz
+  fi
+  return 0
+}
+CREATE_CHROOT_CONTAINER(){
+  ROOTFS=$1
+  CONTAINER_DIR=$2
+  CONTAINER_NAME=$3
+  NEW_USER=$4
+  PASSWORD=$5
+  mkdir -p ${CONTAINER_DIR}||(echo -e "\033[31mFailed to create container directory!"&&return 1)
+  pv $PREFIX/var/container/$ROOTFS|tar -xJf - -C ${CONTAINER_DIR}
+  [[ -e ${CONTAINER_DIR}/dev ]]||mkdir ${CONTAINER_DIR}/dev
+  [[ -e ${CONTAINER_DIR}/proc ]]||mkdir ${CONTAINER_DIR}/proc
+  [[ -e ${CONTAINER_DIR}/sys ]]||mkdir ${CONTAINER_DIR}/sys
+  [[ -e ${CONTAINER_DIR}/sdcard ]]||mkdir ${CONTAINER_DIR}/sdcard
+  rm -f ${CONTAINER_DIR}/etc/resolv.conf >> /dev/null 2>&1
+  echo nameserver 8.8.8.8 >> ${CONTAINER_DIR}/etc/resolv.conf
+  echo nameserver 114.114.114.114 >> ${CONTAINER_DIR}/etc/resolv.conf
+  cp $PREFIX/share/termux-container/group_add.sh ${CONTAINER_DIR}/tmp
+  chmod 777 ${CONTAINER_DIR}/tmp/group_add.sh
+  if [[ ${NEW_USER} != "" && ${PASSWORD} != "" ]];then
+    sed -i "s/NEW_USER=\"\"/NEW_USER=${NEW_USER}/" ${CONTAINER_DIR}/tmp/group_add.sh
+    sed -i "s/PASSWORD=\"\"/PASSWORD=${PASSWORD}/" ${CONTAINER_DIR}/tmp/group_add.sh
+  fi
+  mount -t proc proc  ${CONTAINER_DIR}/proc/
+  mount --rbind /dev ${CONTAINER_DIR}/dev/
+  mount --rbind /sys ${CONTAINER_DIR}/sys/
+  unset LD_PRELOAD
+  $PREFIX/bin/chroot ${CONTAINER_DIR} /tmp/group_add.sh >> /dev/null 2>&1
+  umount -lvf ${CONTAINER_DIR}/dev >> /dev/null 2>&1
+  umount -lvf ${CONTAINER_DIR}/sys >> /dev/null 2>&1
+  umount -lvf ${CONTAINER_DIR}/proc >> /dev/null 2>&1
+  umount -lvf ${CONTAINER_DIR} >> /dev/null 2>&1
+
+
+
+  return 0
+}
+CREATE_PROOT_CONTAINER(){
+  ROOTFS=$1
+  CONTAINER_DIR=$2
+  CONTAINER_NAME=$3
+  NEW_USER=$4
+  PASSWORD=$5
+  ARCH=$6
+  case ${ARCH} in
+      "arm64") apt install qemu-user-aarch64;export CROSS_ARCH="aarch64";;
+      "armhf") apt install qemu-user-arm;export CROSS_ARCH="arm";;
+      "i386") apt install qemu-user-i386;export CROSS_ARCH="i386";;
+      "m68k") apt install qemu-user-m68k;export CROSS_ARCH="m68k";;
+      "ppc") apt install qemu-user-ppc;export CROSS_ARCH="ppc";;
+      "ppc64") apt install qemu-user-ppc64;export CROSS_ARCH="ppc64";;
+      "riscv32") apt install qemu-user-riscv32;export CROSS_ARCH="riscv32";;
+      "riscv64") apt install qemu-user-riscv64;export CROSS_ARCH="riscv64";;
+      "amd64") apt install qemu-user-x86-64;export CROSS_ARCH="x86_64";;
+  esac
+  mkdir -p ${CONTAINER_DIR}||(echo -e "\033[31mFailed to create container directory!"&&return 1)
+  pv $PREFIX/var/container/$ROOTFS|tar -xJf - -C ${CONTAINER_DIR}
+  [[ -e ${CONTAINER_DIR}/dev ]]||mkdir ${CONTAINER_DIR}/dev
+  [[ -e ${CONTAINER_DIR}/proc ]]||mkdir ${CONTAINER_DIR}/proc
+  [[ -e ${CONTAINER_DIR}/sys ]]||mkdir ${CONTAINER_DIR}/sys
+  [[ -e ${CONTAINER_DIR}/sdcard ]]||mkdir ${CONTAINER_DIR}/sdcard
+  rm -f ${CONTAINER_DIR}/etc/resolv.conf >> /dev/null 2>&1
+  echo nameserver 8.8.8.8 >> ${CONTAINER_DIR}/etc/resolv.conf
+  echo nameserver 114.114.114.114 >> ${CONTAINER_DIR}/etc/resolv.conf
+  cp $PREFIX/share/termux-container/group_add.sh ${CONTAINER_DIR}/tmp/
+  chmod 777 ${CONTAINER_DIR}/tmp/group_add.sh
+  if [[ ${NEW_USER} != "" && ${PASSWORD} != "" ]];then
+    sed -i "s/NEW_USER=\"\"/NEW_USER=${NEW_USER}/" ${CONTAINER_DIR}/tmp/group_add.sh
+    sed -i "s/PASSWORD=\"\"/PASSWORD=${PASSWORD}/" ${CONTAINER_DIR}/tmp/group_add.sh
+  fi
+  unset LD_PRELOAD
+  COMMAND="proot --link2symlink --sysvipc -0 -r ${CONTAINER_DIR} -b /dev -b /sys -b /proc -w /root"
+  if [[ ${CROSS_ARCH} != "null" ]];then
+    COMMAND+=" -q qemu-${CROSS_ARCH}"
+  fi
+  ${COMMAND} /tmp/group_add.sh >> /dev/null 2>&1
+
+
+  return 0
+}
 SEARCH_IMAGES(){
   OS=$1
   if [[ $2 = "" ]];then
@@ -90,58 +207,46 @@ SEARCH_IMAGES(){
   echo "Searching for images,this might take a while......"
   if [[ $(curl -sL "http://images.linuxcontainers.org/images/$OS"|grep "404 Not Found") != "" ]];then
     echo -e "\033[33mOS distro not found.\033[0m"
-    #End this function with error code 1
     return 1
   fi
-  #Search if the distro have current cpu arch support.
   for i in $(curl -sL "http://images.linuxcontainers.org/images/$OS"|grep "DIR"|sed -E 's@<a (href)@\n\1@g'| awk -F 'href=' '{print $2}' | cut -d '"' -f 2 |cut -d "/" -f 1);do
     if [[ $(curl -sL "http://images.linuxcontainers.org/images/$OS/$i/$ARCH"|grep "404 Not Found") = "" ]];then
       found_arch=1
       echo -e "\033[34m$OS [$ARCH] : $i"
     fi
   done
-  #Return an error message instead of none.
   if [[ $found_arch != 1 ]];then
     echo -e "\033[33mCould not found image for current cpu architecture,maybe you should choose another cpu architecture and use proot to run cross-arch container.\033[0m"
     return 1
   fi
-  #return 0 if no errors is a good habit.
   return 0
 }
-#An interface for debugging and getting root permissions.
-#We need to support devices without root and running all parts of the script with root permissions is no need,so we get root permissions here for functions needed.
-#Not a bug,if you haven't a better way to implement this function,just keep this.
 EXEC_FUNCTION(){
   $@
 }
-#Just call other functions here.
 CONTAINER_CONSOLE_MAIN(){
   case $1 in
     "help") SHOW_HELPS;;
     "search") SEARCH_IMAGES $2 $3;;
     "login") RUN_CONTAINER $2;;
+    "pull") PULL_ROOTFS $2 $3;;
     "exit") echo -e "\nExit.\033[0m"&&exit;;
     *) echo -e "\033[31mERR:Unknow command,type \`help\` to show helps.\033[0m"
   esac
 }
-#A loop.
-#Get commands to run.
 CONTAINER_CONSOLE(){
   while :
   do
     printf "${COLOR}"
     read -p "Console > " COMMAND
-    #Catch EOF(CTRL-D) signals and exit normally.
     if [[ $? != 0 ]];then
       echo -e "\n\nExit."
       printf "\033[0m"
       exit 0
     fi
-    #Call main function of the Console.
     CONTAINER_CONSOLE_MAIN ${COMMAND}
   done
 }
-#Usage of script `container`
 SHOW_USAGE(){
   LINE=$(($(($(stty size|awk '{print $2}')))/2-23))
   echo -e "\033[${LINE}C              \e[38;5;157m┌───────────┐"
@@ -165,7 +270,6 @@ SHOW_USAGE(){
   echo -e " container -b [Containerfile]    #Build a container using Containerfile."
   echo -e " container -e [function]         #exec function in this script *NOT for user."
 }
-#The script start running here.
 case $1 in
     "-h") SHOW_USAGE;;
     "-e") EXEC_FUNCTION ${@:2};;
