@@ -38,11 +38,9 @@ kernelPatch="${kernelVersion#*$kernelMinor.}"
 kernelPatch="${kernelPatch%%-*}"
 echo -e "Linux kernel version: $kernelMajor.$kernelMinor.$kernelPatch"
 echo -e "Copyright 2022 Moe-hacker"
+echo -e "WARNING: NO WARRANTY HERE"
 echo -e "For usage,just type \`help\`"
 echo ""
-}
-is_value(){
-  ([[ $1 == $2 ]]&&return 0)||return 1
 }
 SHOW_HELPS(){
   echo "Usage:"
@@ -124,7 +122,7 @@ CREATE_CHROOT_CONTAINER(){
   CONTAINER_NAME=$3
   NEW_USER=$4
   PASSWORD=$5
-  mkdir -p ${CONTAINER_DIR}||(echo -e "\033[31mFailed to create container directory!"&&return 1)
+  mkdir -p ${CONTAINER_DIR}||(echo -e "\033[31mError: Failed to create container directory!"&&return 1)
   pv $PREFIX/var/container/$ROOTFS|tar -xJf - -C ${CONTAINER_DIR}
   [[ -e ${CONTAINER_DIR}/dev ]]||mkdir ${CONTAINER_DIR}/dev
   [[ -e ${CONTAINER_DIR}/proc ]]||mkdir ${CONTAINER_DIR}/proc
@@ -159,18 +157,7 @@ CREATE_PROOT_CONTAINER(){
   CONTAINER_NAME=$3
   NEW_USER=$4
   PASSWORD=$5
-  ARCH=$6
-  case ${ARCH} in
-      "arm64") apt install qemu-user-aarch64;export CROSS_ARCH="aarch64";;
-      "armhf") apt install qemu-user-arm;export CROSS_ARCH="arm";;
-      "i386") apt install qemu-user-i386;export CROSS_ARCH="i386";;
-      "m68k") apt install qemu-user-m68k;export CROSS_ARCH="m68k";;
-      "ppc") apt install qemu-user-ppc;export CROSS_ARCH="ppc";;
-      "ppc64") apt install qemu-user-ppc64;export CROSS_ARCH="ppc64";;
-      "riscv32") apt install qemu-user-riscv32;export CROSS_ARCH="riscv32";;
-      "riscv64") apt install qemu-user-riscv64;export CROSS_ARCH="riscv64";;
-      "amd64") apt install qemu-user-x86-64;export CROSS_ARCH="x86_64";;
-  esac
+  CROSS_ARCH=$6
   mkdir -p ${CONTAINER_DIR}||(echo -e "\033[31mFailed to create container directory!"&&return 1)
   pv $PREFIX/var/container/$ROOTFS|tar -xJf - -C ${CONTAINER_DIR}
   [[ -e ${CONTAINER_DIR}/dev ]]||mkdir ${CONTAINER_DIR}/dev
@@ -194,6 +181,166 @@ CREATE_PROOT_CONTAINER(){
   ${COMMAND} /tmp/group_add.sh >> /dev/null 2>&1
 
 
+  return 0
+}
+RUN_CHROOT_CONTAINER(){
+  if [[ ! -e $PREFIX/bin/moe-container ]];then
+    echo -e "\033[31mError: Can not find moe-container installed !"
+    return 1
+  fi
+  CONTAINER_NAME=$1
+  if [[ ! -e $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf ]];then
+    echo -e "\033[31mError: Container does not exist !"
+    return 1
+  fi
+  source $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf
+  kernelVersion="$(uname -r)"
+  kernelMajor="${kernelVersion%%.*}"
+  kernelMinor="${kernelVersion#$kernelMajor.}"
+  kernelMinor="${kernelMinor%%.*}"
+  kernelPatch="${kernelVersion#*$kernelMinor.}"
+  kernelPatch="${kernelPatch%%-*}"
+  clear
+  printf "${COLOR}"
+  echo -e ""
+  echo -e "//"
+  echo -e ""
+  i1=$(($(stty size|awk '{print $2}')))
+  let i1=$(($i1))
+  i1=$(($i1-13))
+  echo -e "\e[30;1;48;2;254;228;208mCONTAINER_RUN$(yes " "|sed $i1'q'|tr -d '\n')\033[0m"
+  echo -e "${COLOR}"
+  echo -e "//"
+  echo -e ""
+  echo -e "    _________      [] CONTAINER: ${CONTAINER_NAME}"
+  echo -e "   /        /\\     [] ARCH: $(uname -m)"
+  echo -e "  /        /  \\    [] SELINUX: $(getenforce)"
+  echo -e " /        /    \\   [] KERNEL VERSION: $kernelMajor.$kernelMinor.$kernelPatch"
+  echo -e "/________/      \\  [] TIME: $(date|awk '{print $4}')"
+  echo -e "\\        \\      /  [] HOSTNAME: $(hostname)"
+  echo -e " \\        \\    /   [] ANDROID VERSION: $(getprop ro.build.version.release)"
+  echo -e "  \\        \\  /    [] CONTAINER DIR: ${CONTAINER_DIR}"
+  echo -e "   \\________\\/     [] PRIVAGE LEVEL: ${PRIVAGE_LEVEL}"
+  echo -e ""
+  echo -e "〉TERMUX-CONTAINER"
+  i1=$(($(stty size|awk '{print $2}')))
+  let i1=$(($i1))
+  echo -e "$(yes "─"|sed $i1'q'|tr -d '\n')"
+  echo -e "//////"
+  echo -e ""
+  if [[ ! -e ${CONTAINER_DIR} ]];then
+    echo -e "\033[31mError: Container directory does not exist !"
+    return 1
+  fi
+  CONTAINER_PARAMETER=${CONTAINER_DIR}
+  if [[ ${ENABLE_UNSHARE} == "true" ]];then
+    CONTAINER_PARAMETER+=" -u"
+  fi
+  if [[ ${PRIVAGE_LEVEL} == "0" ]];then
+    CONTAINER_PARAMETER+=" -D"
+  elif [[ ${PRIVAGE_LEVEL} == "1" ]];then
+    CONTAINER_PARAMETER+=" -d"
+  fi
+  printf "\033[0m"
+  unset LD_PRELOAD
+  moe-container ${CONTAINER_PARAMETER} ${CONTAINER_DIR}
+  return 0
+}
+RUN_PROOT_CONTAINER(){
+  CONTAINER_NAME=$1
+  if [[ ! -e $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf ]];then
+    echo -e "\033[31mError: Container does not exist !"
+    return 1
+  fi
+  source $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf
+  kernelVersion="$(uname -r)"
+  kernelMajor="${kernelVersion%%.*}"
+  kernelMinor="${kernelVersion#$kernelMajor.}"
+  kernelMinor="${kernelMinor%%.*}"
+  kernelPatch="${kernelVersion#*$kernelMinor.}"
+  kernelPatch="${kernelPatch%%-*}"
+  clear
+  printf "${COLOR}"
+  echo -e ""
+  echo -e "//"
+  echo -e ""
+  i1=$(($(stty size|awk '{print $2}')))
+  let i1=$(($i1))
+  i1=$(($i1-13))
+  echo -e "\e[30;1;48;2;254;228;208mCONTAINER_RUN$(yes " "|sed $i1'q'|tr -d '\n')\033[0m"
+  echo -e "${COLOR}"
+  echo -e "//"
+  echo -e ""
+  echo -e "    _________      [] CONTAINER: ${CONTAINER_NAME}"
+  echo -e "   /        /\\     [] ARCH: $(uname -m)"
+  echo -e "  /        /  \\    [] CROSS-ARCH: ${CROSS_ARCH}"
+  echo -e " /        /    \\   [] KERNEL: $kernelMajor.$kernelMinor.$kernelPatch"
+  echo -e "/________/      \\  [] TIME: $(date|awk '{print $4}')"
+  echo -e "\\        \\      /  [] HOSTNAME: $(hostname)"
+  echo -e " \\        \\    /   [] ANDROID: $(getprop ro.build.version.release)"
+  echo -e "  \\        \\  /    [] CONTAINER_DIR: ${CONTAINER_DIR}"
+  echo -e "   \\________\\/     [] VERSION: 9.0-dev"
+  echo -e ""
+  echo -e "〉TERMUX-CONTAINER"
+  i1=$(($(stty size|awk '{print $2}')))
+  let i1=$(($i1))
+  echo -e "$(yes "─"|sed $i1'q'|tr -d '\n')"
+  echo -e "//////"
+  echo -e ""
+  if [[ ! -e ${CONTAINER_DIR} ]];then
+    echo -e "\033[31mError: Container directory does not exist !"
+    return 1
+  fi
+  unset LD_PRELOAD
+  COMMAND="proot"
+  COMMAND+=" --link2symlink"
+  COMMAND+=" --kill-on-exit"
+  COMMAND+=" --sysvipc"
+  COMMAND+=" -0"
+  COMMAND+=" -r ${CONTAINER_DIR}"
+  COMMAND+=" -b /dev"
+  COMMAND+=" -b /sys"
+  COMMAND+=" -b /proc"
+  COMMAND+=" -w /root"
+  if [[ ${MOUNT_SDCARD} = "true" ]];then
+    COMMAND+=" -b /sdcard"
+  fi
+  if [[ ${CROSS_ARCH} != "null" ]];then
+    COMMAND+=" -q qemu-${CROSS_ARCH}"
+  fi
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/buddyinfo:/proc/buddyinfo"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/cgroups:/proc/cgroups"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/consoles:/proc/consoles"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/crypto:/proc/crypto"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/devices:/proc/devices"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/diskstats:/proc/diskstats"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/execdomains:/proc/execdomains"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/fb:/proc/fb"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/filesystems:/proc/filesystems"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/interrupts:/proc/interrupts"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/iomem:/proc/iomem"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/ioports:/proc/ioports"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/kallsyms:/proc/kallsyms"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/key-users:/proc/key-users"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/keys:/proc/keys"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/kpageflags:/proc/kpageflags"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/loadavg:/proc/loadavg"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/locks:/proc/locks"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/misc:/proc/misc"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/modules:/proc/modules"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/pagetypeinfo:/proc/pagetypeinfo"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/partitions:/proc/partitions"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/sched_debug:/proc/sched_debug"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/softirqs:/proc/softirqs"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/stat:/proc/stat"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/timer_list:/proc/timer_list"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/uptime:/proc/uptime"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/version:/proc/version"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/vmallocinfo:/proc/vmallocinfo"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/vmstat:/proc/vmstat"
+  COMMAND+=" --mount=$PREFIX/share/termux-container/proc/zoneinfo:/proc/zoneinfo"
+  COMMAND+=" /bin/su - root"
+  ${COMMAND}
   return 0
 }
 SEARCH_IMAGES(){
@@ -221,6 +368,229 @@ SEARCH_IMAGES(){
   fi
   return 0
 }
+CONTAINER_NEW(){
+  GET_CPU_ARCH
+  echo
+  echo -e "Enter the name of this container."
+  while :
+  do
+    read -p "[] Name > "  CONTAINER_NAME
+    if [[ $? != 0 ]];then
+      echo
+      return 1
+    fi
+    if [[ ${CONTAINER_NAME} != "" ]];then
+      if [[ ! -e $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf ]]&&[[ ! -e $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf ]];then
+        echo
+        break
+      else
+        echo -e "\033[31mError: container name already in use !${COLOR}"
+      fi
+    fi
+  done
+  echo -e "If your phone is rooted,it is recommand to run container with chroot mode.If not or you want to run cross-arch container,please choose proot."
+  echo -e "Chroot mode will use moe-container for unshare feature and capability reduse to make the container more secure,see:\n\033[4mhttps://github.com/Moe-hacker/moe-container\033[0m${COLOR}"
+  echo -e "Before you use it,you should allow the MIT License of it:\n\033[4mhttps://github.com/Moe-hacker/moe-container/blob/main/LICENSE\033[0m${COLOR}"
+  echo -e "\nEnter the type of this container."
+  while :
+  do
+    read -p "[] Type [chroot/proot] > "  CONTAINER_TYPE
+    if [[ $? != 0 ]];then
+      echo
+      return 1
+    fi
+    if [[ ${CONTAINER_TYPE} == "chroot" ]]||[[ ${CONTAINER_TYPE} == "proot" ]];then
+      break
+    fi
+  done
+  if [[ ${CONTAINER_TYPE} == "chroot" ]];then
+    echo -e "\nUnshare mode will use namespace features of Linux kernel to provide more security,but some devices may crash after using it.\n"
+    while :
+    do
+      read -p "[] Enable unshare [true/false] > " ENABLE_UNSHARE
+      if [[ $? != 0 ]];then
+        echo
+        return 1
+      fi
+      if [[ ${ENABLE_UNSHARE} == "true" ]]||[[ ${ENABLE_UNSHARE} == "false" ]];then
+        break
+      fi
+    done
+    echo -e "\nThe privilege level determines the privileges that the container can get. 0 is the lowest and 2 is the highest.Lower privileges can make the container more secure,but operations like mount or mknode will not be authorized in the container.It's recommended to set it to 1.\n"
+    while :
+    do
+      read -p "[] Privilege level [0-2] > " PRIVAGE_LEVEL
+      if [[ $? != 0 ]];then
+        echo
+        return 1
+      fi
+      if [[ ${PRIVAGE_LEVEL} == "0" ]]||[[ ${PRIVAGE_LEVEL} == "1" ]]||[[ ${PRIVAGE_LEVEL} == "2" ]];then
+        break
+      fi
+    done
+  else
+    echo -e "\nYou can use qemu to simulate another CPU architecture to run containers,however,the performance is not ideal."
+    echo -e "Available CPU architectures are: arm64 armhf amd64 i386 m68k ppc ppc64el riscv32 riscv64"
+    echo -e "If you don't want to use qemu,just press Enter here.\n"
+    while :
+    do
+      read -p "[] CPU architecture > " ARCH
+      if [[ $? != 0 ]];then
+        echo
+        return 1
+      fi
+      case ${ARCH} in
+        "i386"|"m68k"|"ppc"|"riscv32"|"riscv64") export ARCH=${CROSS_ARCH}&&apt install qemu-user-${CROSS_ARCH};break;;
+        "arm64") export CROSS_ARCH=aarch64&&apt install qemu-user-${CROSS_ARCH};break;;
+        "armhf") export CROSS_ARCH=arm&&apt install qemu-user-${CROSS_ARCH};break;;
+        "amd64") export CROSS_ARCH=x86_64&&apt install qemu-user-x86-64;break;;
+        "ppc64el") export CROSS_ARCH=ppc64&&apt install qemu-user-${CROSS_ARCH};break;;
+        "") export CROSS_ARCH=null&&break;;
+      esac
+    done
+  fi
+  echo -e "\nYou can create a new common user in the container.If you don't want it,just press Enter here.\n"
+  while :
+  do
+    read -p "[] Username > " NEW_USER
+    if [[ $? != 0 ]];then
+      echo
+      return 1
+    fi
+    break
+  done
+  if [[ ${NEW_USER} != "" ]];then
+    while :
+    do
+      read -p "[] Password > " PASSWORD
+      if [[ $? != 0 ]];then
+        echo
+        return 1
+      fi
+      if [[ ${PASSWORD} != "" ]];then
+        break
+      fi
+    done
+  fi
+  echo -e "\nThe container absolute path is the directory used to store the container,for chroot,you can use /data/container-name,and for proot,you can use /data/data/com.termux/files/home/container-name,but do not use directory in /sdcard,or you might run into problems !\n"
+  echo -e "Enter the absolute path of container."
+  while :
+  do
+    read -p "[] Container path > " CONTAINER_DIR
+    if [[ $? != 0 ]];then
+      echo
+      return 1
+    fi
+    if [[ -e ${CONTAINER_DIR} ]];then
+      echo -e "\033[31mError: container directory already exist !${COLOR}"
+      continue
+    fi
+    for BLACKLIST in {/bin/,/dev/,/odm/,/oem/,/proc/,/product/,/sys/,/system/,/vendor/};do
+      if [[ ${CONTAINER_DIR} = $BLACKLIST* ]];then
+        echo -e "\033[31mError: refuse to use system directory !${COLOR}"
+        CONTINUE=true
+      fi
+    done
+    if [[ ${CONTINUE} == "true" ]];then
+      continue
+    fi
+    if [[ ${CONTAINER_DIR:0:1} != "/" ]];then
+      echo -e "\033[31mError: please use absolute path !${COLOR}"
+      continue
+    else
+      break
+    fi
+  done
+  echo -e "\nChoose the OS and the version to install,you can use search command here."
+  while :
+  do
+    read -p "[] OS > " OS
+    if [[ $? != 0 ]];then
+      echo
+      return 1
+    fi
+    if [[ $(echo $OS|awk '{print $1}') == search ]];then
+      SEARCH_IMAGES $(echo $OS|awk '{print $2}') $ARCH
+      printf "${COLOR}"
+      continue
+    fi
+    if [[ ${OS} != "" ]];then
+      while :
+      do
+        printf "${COLOR}"
+        read -p "[] Vesion > " VERSION
+        if [[ $? != 0 ]];then
+          echo
+          return 1
+        fi
+        if [[ ${VERSION} != "" ]];then
+          if [[ ! -e $PREFIX/var/container/${OS}-${VERSION}-${ARCH}.tar.xz ]];then
+            PULL_ROOTFS ${OS} ${VERSION} ${ARCH}&&break
+          else
+            break
+          fi
+        fi
+      done
+      break
+    fi
+  done
+  echo -e "Before creating the container,you need to make sure the config is all right:"
+  if [[ ${CONTAINER_TYPE} == "chroot" ]];then
+    echo -e "Type            : chroot"
+    echo -e "Enable unshare  : ${ENABLE_UNSHARE}"
+    echo -e "Privilege level : ${PRIVAGE_LEVEL}"
+  else
+    echo -e "Type            : proot"
+    echo -e "Cross-arch      :${CROSS_ARCH}"
+  fi
+  echo -e "Name            : ${CONTAINER_NAME}"
+  echo -e "Container path  : ${CONTAINER_DIR}"
+  echo -e "New user        : ${NEW_USER}"
+  echo -e "Password        : ${PASSWORD}"
+  echo -e "OS              : ${OS}"
+  echo -e "Version         : ${VERSION}"
+  read -p "Continue [y/n] ?" CONTINUE
+  if [[ ${CONTINUE} == "n" ]];then
+    return 1
+  fi
+  if [[ ${CONTAINER_TYPE} == "chroot" ]];then
+    sudo container -e CREATE_CHROOT_CONTAINER ${OS}-${VERSION}-${ARCH}.tar.xz ${CONTAINER_DIR} ${CONTAINER_NAME} ${NEW_USER} ${PASSWORD}
+  else
+    CREATE_PROOT_CONTAINER ${OS}-${VERSION}-${ARCH}.tar.xz ${CONTAINER_DIR} ${CONTAINER_NAME} ${NEW_USER} ${PASSWORD} ${CROSS_ARCH}
+  fi
+}
+LIST(){
+  echo -e "Images:"
+  echo -e "OS:Version:Arch"
+  echo -e "================"
+  if [[ -e $PREFIX/var/container ]];then
+    for i in $(ls $PREFIX/var/container);do
+      OS=${i%%-*}
+      VERSION=${i#$OS-}
+      VERSION=${VERSION%-*}
+      ARCH=${i#*$VERSION-}
+      ARCH=${ARCH%%.*}
+      echo "$OS:$VERSION:$ARCH"
+    done
+  fi
+  echo -e "Containers:"
+  echo -e "Type:Name"
+  echo -e "================"
+  if [[ -e $PREFIX/etc/container/proot ]];then
+    for i in $(ls $PREFIX/etc/container/proot);do
+      NAME=${i#*-}
+      NAME=${NAME%%.*}
+      echo "proot:$NAME"
+    done
+  fi
+  if [[ -e $PREFIX/etc/container/chroot ]];then
+    for i in $(ls $PREFIX/etc/container/chroot);do
+      NAME=${i#*-}
+      NAME=${NAME%%.*}
+      echo "chroot:$NAME"
+    done
+  fi
+}
 EXEC_FUNCTION(){
   $@
 }
@@ -230,8 +600,10 @@ CONTAINER_CONSOLE_MAIN(){
     "search") SEARCH_IMAGES $2 $3;;
     "login") RUN_CONTAINER $2;;
     "pull") PULL_ROOTFS $2 $3;;
+    "new") CONTAINER_NEW;;
+    "ls") LIST;;
     "exit") echo -e "\nExit.\033[0m"&&exit;;
-    *) echo -e "\033[31mERR:Unknow command,type \`help\` to show helps.\033[0m"
+    *) echo -e "\033[31mError: Unknow command,type \`help\` to show helps.\033[0m"
   esac
 }
 CONTAINER_CONSOLE(){
