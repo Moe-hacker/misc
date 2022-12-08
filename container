@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-trap "CONTAINER_CONSOLE" SIGINT
+trap "echo&&CONTAINER_CONSOLE" SIGINT
 RGB="254;228;208"
 COLOR="\033[1;38;2;${RGB}m"
 LINE=$(($(($(stty size|awk '{print $2}')))/2-22))
@@ -60,15 +60,15 @@ GET_CPU_ARCH(){
   return 0
 }
 PULL_ROOTFS(){
-  OS=$(echo $1|cut -d ":" -f 1)
-  VERSION=$(echo $1|cut -d ":" -f 2)
-  if [[ $2 = "" ]];then
+  OS=$1
+  VERSION=$2
+  if [[ $3 = "" ]];then
     GET_CPU_ARCH
   else
-    ARCH=$2
+    ARCH=$3
   fi
   if [[ -e $PREFIX/var/container/${OS}-${VERSION}-${ARCH}.tar.xz ]];then
-    echo -e "\033[31mError: Rootfs already exists !"
+    echo -e "\033[31mError: Rootfs already exists !${COLOR}"
     return 1
   fi
   if [[ $OS != "parrot" ]];then
@@ -80,7 +80,7 @@ PULL_ROOTFS(){
     fi
     TIME=$(curl -sL ${MIRROR}/${OS}/${VERSION}/${ARCH}/${VERSION2}|grep "DIR" |sed -E 's@<a (href)@\n\1@g'| awk -F 'href=' '{print $2}' | cut -d '"' -f 2 |cut -d "/" -f 2|tail -n 1)
     if [[ ${TIME} = "" ]];then
-      echo -e "\033[31mError: Can not find rootfs !"
+      echo -e "\033[31mError: Can not find rootfs !${COLOR}"
       return 1
     fi
     URL=${MIRROR}/${OS}/${VERSION}/${ARCH}/${VERSION2}/${TIME}/rootfs.tar.xz
@@ -90,14 +90,14 @@ PULL_ROOTFS(){
     cd $PREFIX/tmp/container
     axel -n16 ${URL}
     if [[ $? != 0 ]];then
-      echo -e "\033[31mError: Failed to download rootfs !"
+      echo -e "\033[31mError: Failed to download rootfs !${COLOR}"
       return 1
     fi
     mv rootfs.tar.xz $PREFIX/var/container/${OS}-${VERSION}-${ARCH}.tar.xz
   else
     ROOTFS=$(curl -sL https://mirrors.bfsu.edu.cn/parrot/iso/testing/|grep title|sed -E 's@<a (href)@\n\1@g'| awk -F 'href=' '{print $2}' | cut -d '"' -f 2|tail -n +5|grep ".tar.xz"|grep ${ARCH}|head -n 1)
     if [[ ${ROOTFS} = "" ]];then
-      echo -e "\033[31mError: Can not find rootfs !"
+      echo -e "\033[31mError: Can not find rootfs !${COLOR}"
       return 1
     fi
     URL="https://mirrors.bfsu.edu.cn/parrot/iso/testing/${ROOTFS}"
@@ -122,7 +122,10 @@ CREATE_CHROOT_CONTAINER(){
   CONTAINER_NAME=$3
   NEW_USER=$4
   PASSWORD=$5
-  mkdir -p ${CONTAINER_DIR}||(echo -e "\033[31mError: Failed to create container directory!"&&return 1)
+  if ! mkdir -p ${CONTAINER_DIR};then
+    echo -e "\033[31mError: Failed to create container directory !${COLOR}"
+    return 1
+  fi
   pv $PREFIX/var/container/$ROOTFS|tar -xJf - -C ${CONTAINER_DIR}
   [[ -e ${CONTAINER_DIR}/dev ]]||mkdir ${CONTAINER_DIR}/dev
   [[ -e ${CONTAINER_DIR}/proc ]]||mkdir ${CONTAINER_DIR}/proc
@@ -146,9 +149,6 @@ CREATE_CHROOT_CONTAINER(){
   umount -lvf ${CONTAINER_DIR}/sys >> /dev/null 2>&1
   umount -lvf ${CONTAINER_DIR}/proc >> /dev/null 2>&1
   umount -lvf ${CONTAINER_DIR} >> /dev/null 2>&1
-
-
-
   return 0
 }
 CREATE_PROOT_CONTAINER(){
@@ -158,8 +158,11 @@ CREATE_PROOT_CONTAINER(){
   NEW_USER=$4
   PASSWORD=$5
   CROSS_ARCH=$6
-  mkdir -p ${CONTAINER_DIR}||(echo -e "\033[31mFailed to create container directory!"&&return 1)
-  pv $PREFIX/var/container/$ROOTFS|tar -xJf - -C ${CONTAINER_DIR}
+  if ! mkdir -p ${CONTAINER_DIR};then
+    echo -e "\033[31mFailed to create container directory !${COLOR}"
+    return 1
+  fi
+  pv $PREFIX/var/container/$ROOTFS|proot -l tar -xJf - -C ${CONTAINER_DIR}
   [[ -e ${CONTAINER_DIR}/dev ]]||mkdir ${CONTAINER_DIR}/dev
   [[ -e ${CONTAINER_DIR}/proc ]]||mkdir ${CONTAINER_DIR}/proc
   [[ -e ${CONTAINER_DIR}/sys ]]||mkdir ${CONTAINER_DIR}/sys
@@ -179,18 +182,16 @@ CREATE_PROOT_CONTAINER(){
     COMMAND+=" -q qemu-${CROSS_ARCH}"
   fi
   ${COMMAND} /tmp/group_add.sh >> /dev/null 2>&1
-
-
   return 0
 }
 RUN_CHROOT_CONTAINER(){
   if [[ ! -e $PREFIX/bin/moe-container ]];then
-    echo -e "\033[31mError: Can not find moe-container installed !"
+    echo -e "\033[31mError: Can not find moe-container installed !${COLOR}"
     return 1
   fi
   CONTAINER_NAME=$1
   if [[ ! -e $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf ]];then
-    echo -e "\033[31mError: Container does not exist !"
+    echo -e "\033[31mError: Container does not exist !${COLOR}"
     return 1
   fi
   source $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf
@@ -229,7 +230,7 @@ RUN_CHROOT_CONTAINER(){
   echo -e "//////"
   echo -e ""
   if [[ ! -e ${CONTAINER_DIR} ]];then
-    echo -e "\033[31mError: Container directory does not exist !"
+    echo -e "\033[31mError: Container directory does not exist !${COLOR}"
     return 1
   fi
   CONTAINER_PARAMETER=${CONTAINER_DIR}
@@ -249,7 +250,7 @@ RUN_CHROOT_CONTAINER(){
 RUN_PROOT_CONTAINER(){
   CONTAINER_NAME=$1
   if [[ ! -e $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf ]];then
-    echo -e "\033[31mError: Container does not exist !"
+    echo -e "\033[31mError: Container does not exist !${COLOR}"
     return 1
   fi
   source $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf
@@ -288,7 +289,7 @@ RUN_PROOT_CONTAINER(){
   echo -e "//////"
   echo -e ""
   if [[ ! -e ${CONTAINER_DIR} ]];then
-    echo -e "\033[31mError: Container directory does not exist !"
+    echo -e "\033[31mError: Container directory does not exist !${COLOR}"
     return 1
   fi
   unset LD_PRELOAD
@@ -541,7 +542,7 @@ CONTAINER_NEW(){
     echo -e "Privilege level : ${PRIVAGE_LEVEL}"
   else
     echo -e "Type            : proot"
-    echo -e "Cross-arch      :${CROSS_ARCH}"
+    echo -e "Cross-arch      : ${CROSS_ARCH}"
   fi
   echo -e "Name            : ${CONTAINER_NAME}"
   echo -e "Container path  : ${CONTAINER_DIR}"
@@ -555,11 +556,18 @@ CONTAINER_NEW(){
   fi
   if [[ ${CONTAINER_TYPE} == "chroot" ]];then
     sudo container -e CREATE_CHROOT_CONTAINER ${OS}-${VERSION}-${ARCH}.tar.xz ${CONTAINER_DIR} ${CONTAINER_NAME} ${NEW_USER} ${PASSWORD}
+    [[ -e $PREFIX/etc/container/chroot ]]||mkdir -p $PREFIX/etc/container/chroot
+    echo -e "#This file was automatically created by termux-container.\n#Do not edit this file if you don't know what you are doing !" >> $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf
+    echo -e "CONTAINER_NAME=${CONTAINER_NAME}\nOS=${OS}\nCONTAINER_DIR=${CONTAINER_DIR}\nENABLE_UNSHARE=${ENABLE_UNSHARE}\nPRIVAGE_LEVEL=${PRIVAGE_LEVEL}\nCROSS_ARCH=null" >> $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf
   else
     CREATE_PROOT_CONTAINER ${OS}-${VERSION}-${ARCH}.tar.xz ${CONTAINER_DIR} ${CONTAINER_NAME} ${NEW_USER} ${PASSWORD} ${CROSS_ARCH}
+    [[ -e $PREFIX/etc/container/proot ]]||mkdir -p $PREFIX/etc/container/proot
+    echo -e "#This file was automatically created by termux-container.\n#Do not edit this file if you don't know what you are doing !" >> $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf
+    echo -e "CONTAINER_NAME=${CONTAINER_NAME}\nOS=${OS}\nCONTAINER_DIR=${CONTAINER_DIR}\nCROSS_ARCH=${CROSS_ARCH}" >> $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf
   fi
 }
 LIST(){
+  echo
   echo -e "Images:"
   echo -e "OS:Version:Arch"
   echo -e "================"
@@ -573,6 +581,8 @@ LIST(){
       echo "$OS:$VERSION:$ARCH"
     done
   fi
+  echo
+  echo
   echo -e "Containers:"
   echo -e "Type:Name"
   echo -e "================"
@@ -590,6 +600,65 @@ LIST(){
       echo "chroot:$NAME"
     done
   fi
+  echo
+}
+EXPORT_CONTAINER(){
+  CONTAINER_NAME=$1
+  if [[ -e $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf ]];then
+    export TYPE=proot
+    source $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf
+  elif [[ -e $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf ]];then
+    export TYPE=chroot
+    if [[ $(whoami) != "root" ]];then
+      sudo container -e EXPORT_CONTAINER ${CONTAINER_NAME}
+      return
+    fi
+  else
+    echo -e "\033[31mError: container does not exist !${COLOR}"
+    return
+  fi
+  FILE=/sdcard/${OS}-${ARCH}-${CROSS_ARCH}-${CONTAINER_NAME}-$(date +%y%m%d%H%M%S).tar.xz
+  if ! cd ${CONTAINER_DIR};then
+    echo -e "\033[31mError: container directory does not exist !${COLOR}"
+    return
+  fi
+  if [[ ${TYPE} == "chroot" ]];then
+    tar -JPpcvf ${FILE} .
+  else
+    proot -l tar -JPpcvf ${FILE} .
+  fi
+}
+IMPORT_ROOTFS(){
+  FILE=$1
+  if [[ ! -e ${FILE} ]];then
+    echo -e "\033[31mError: rootfs file does not exist !${COLOR}"
+    return 1
+  fi
+  while :
+  do
+    read -p "[] OS > " OS
+    if [[ ${OS} != "" ]];then
+      break
+    fi
+  done
+  while :
+  do
+    read -p "[] Arch > " ARCH
+    case $ARCH in
+      "i386"|"m68k"|"ppc"|"riscv32"|"riscv64"|"arm64"|"armhf"|"ppc64"|"amd64") break;;
+    esac
+  done
+  while :
+  do
+    read -p "[] Version > " VERSION
+    if [[ ${VERSION} != "" ]]&&[[ ! -e $PREFIX/var/container/${OS}-${VERSION}-${ARCH}.tar.xz ]];then
+      break
+    else
+      echo -e "\033[31mError: OS version already in use !${COLOR}"
+    fi
+  done
+  cp ${FILE} $PREFIX/var/container/${OS}-${VERSION}-${ARCH}.tar.xz
+  return 0
 }
 EXEC_FUNCTION(){
   $@
@@ -599,11 +668,13 @@ CONTAINER_CONSOLE_MAIN(){
     "help") SHOW_HELPS;;
     "search") SEARCH_IMAGES $2 $3;;
     "login") RUN_CONTAINER $2;;
-    "pull") PULL_ROOTFS $2 $3;;
+    "pull") PULL_ROOTFS $2 $3 $4;;
+    "import") IMPORT_ROOTFS $2;;
+    "export") EXPORT_CONTAINER $2;;
     "new") CONTAINER_NEW;;
     "ls") LIST;;
     "exit") echo -e "\nExit.\033[0m"&&exit;;
-    *) echo -e "\033[31mError: Unknow command,type \`help\` to show helps.\033[0m"
+    *) echo -e "\033[31mError: Unknow command,type \`help\` to show helps.\033[0m${COLOR}"
   esac
 }
 CONTAINER_CONSOLE(){
