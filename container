@@ -749,6 +749,66 @@ CONTAINER_CONSOLE_MAIN(){
     *) echo -e "\033[31mError: Unknow command,type \`help\` to show helps.\033[0m${COLOR}"
   esac
 }
+CONTAINER_BUILD(){
+  CONTAINERFILE=$1
+  if [[ ! -e ${CONTAINERFILE} ]];then
+    echo -e "\033[31mError: containerfile does not exist !${COLOR}"
+    return 1
+  fi
+  CONFFILE=$PREFIX/tmp/container.tmp
+  rm=$(rm ${CONFFILE} 2>&1 3>&1 >/dev/null)
+  touch ${CONFFILE}
+  cat ${CONTAINERFILE}|while read COMMAND
+  do
+    case ${COMMAND} in
+      "#"*) continue;;
+      "DESC"*) echo "DESC=\"${COMMAND#DESC\ }\"" >> ${CONFFILE};;
+      "NAME"*) echo "NAME=\"${COMMAND#NAME\ }\"" >> ${CONFFILE};;
+      "MAINTAINER"*) echo "MAINTAINER=\"${COMMAND#MAINTAINER\ }\"" >> ${CONFFILE}&&continue;;
+      "TYPE"*) echo "TYPE=\"${COMMAND#TYPE\ }\"" >> ${CONFFILE}&&continue;;
+      "ARCH"*) echo "ARCH=\"${COMMAND#ARCH\ }\"" >> ${CONFFILE}&&continue;;
+      "FROM"*) OS_=${COMMAND#FROM\ }&&OS="$(echo ${OS_}|cut -d ":" -f 1)"&&VERSION="$(echo ${OS_}|cut -d ":" -f 2)"&&echo -e "OS=\"${OS}\"\nVERSION=\"${VERSION}\"" >> ${CONFFILE}&&continue;;
+      "ADD"*) echo "ADD_COMMAND=\"wget $(echo ${COMMAND}|awk '{print $2}') -O \${CONTAINER_DIR}/$(echo ${COMMAND}|awk '{print $3}');\"" >> ${CONFFILE}&&continue;;
+      "RUN"*) EXEC_COMMAND=${COMMAND#RUN\ }&&echo "EXEC_COMMAND=\"${EXEC_COMMAND};\"" >> ${CONFFILE}&&continue;;
+      *) echo -e "\033[33mWarning: unknow syntx ${COMMAND}${COLOR}"&&continue;;
+    esac
+  done
+  source ${CONFFILE}
+  if [[ ${NAME} == "" ]]||[[ ${TYPE} == "" ]]||[[ ${OS} == "" ]]||[[ ${VERSION} == "" ]];then
+    echo -e "\033[31mError: incomplete containerfile !${COLOR}"
+    return 1
+  fi
+  if [[ ${MAINTAINER} != "" ]];then
+    echo "Maintainer info : ${MAINTAINER}"
+  fi
+  if [[ ${DESC} != "" ]];then
+    echo "Description     : ${DESC}"
+  fi
+  echo "OS              : ${OS}"
+  echo "Version         : ${VERSION}"
+  read -p "Press Enter to continue."
+  if [[ ${TYPE} == "proot" ]];then
+    case ${ARCH} in
+      "i386"|"m68k"|"ppc"|"riscv32"|"riscv64") export ARCH=${CROSS_ARCH}&&apt install qemu-user-${CROSS_ARCH};;
+      "arm64") export CROSS_ARCH=aarch64&&apt install qemu-user-${CROSS_ARCH};;
+      "armhf") export CROSS_ARCH=arm&&apt install qemu-user-${CROSS_ARCH};;
+      "amd64") export CROSS_ARCH=x86_64&&apt install qemu-user-x86-64;;
+      "ppc64el") export CROSS_ARCH=ppc64&&apt install qemu-user-${CROSS_ARCH};;
+      "") export CROSS_ARCH=null;;
+    esac
+  elif  [[ ${TYPE} == "chroot" ]];then
+    GET_CPU_ARCH
+  else
+    echo -e "\033[31mError: Unknow container type !${COLOR}"
+    return 1
+  fi
+  TMPDIR=$PREFIX/tmp/container-$(date +%y%m%d%H%M%S)
+  mkdir -p ${TMPDIR}
+  if [[ ! -e $PREFIX/var/container/${OS}-${VERSION}-${ARCH}.tar.xz ]];then
+    PULL_ROOTFS ${OS} ${VERSION} ${ARCH}||return 1
+  fi
+  rm -rf ${TMPDIR}
+}
 CONTAINER_CONSOLE(){
   while :
   do
