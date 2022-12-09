@@ -745,7 +745,8 @@ CONTAINER_CONSOLE_MAIN(){
     "new") CONTAINER_NEW;;
     "ls") LIST;;
     "exit") echo -e "\nExit.\033[0m"&&exit;;
-    "")return;;
+    "rm") REMOVE_CONTAINER $2;;
+    "") return;;
     *) echo -e "\033[31mError: Unknow command,type \`help\` to show helps.\033[0m${COLOR}"
   esac
 }
@@ -808,6 +809,61 @@ CONTAINER_BUILD(){
     PULL_ROOTFS ${OS} ${VERSION} ${ARCH}||return 1
   fi
   rm -rf ${TMPDIR}
+}
+REMOVE_CONTAINER(){
+  CONTAINER_NAME=$1
+  if [[ -e $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf ]];then
+    source $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf
+    echo -e "======================================="
+    echo -e "Name                : ${CONTAINER_NAME}"
+    echo -e "OS                  : ${OS}"
+    echo -e "TYPE                : proot"
+    echo -e "Container directory : ${CONTAINER_DIR}"
+    echo
+    read -p "Press Enter to remove this container or CTRL-C to exit."
+    chmod -Rv 777 ${CONTAINER_DIR}
+    rm -rfv ${CONTAINER_DIR}
+    rm -v $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf
+  elif [[ -e $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf ]];then
+    if [[ $(whoami) != "root" ]];then
+      sudo container -e REMOVE_CONTAINER ${CONTAINER_NAME}
+      return
+    fi
+    echo -e "======================================="
+    echo -e "Name                : ${CONTAINER_NAME}"
+    echo -e "OS                  : ${OS}"
+    echo -e "TYPE                : chroot"
+    echo -e "Container directory : ${CONTAINER_DIR}"
+    echo
+    read -p "Press Enter to remove this container or CTRL-C to exit."
+    for i in {0..10};do
+      umount -lvf ${CONTAINER_DIR}/dev >> /dev/null 2>&1
+      umount -lvf ${CONTAINER_DIR}/sys >> /dev/null 2>&1
+      umount -lvf ${CONTAINER_DIR}/proc >> /dev/null 2>&1
+      umount ${CONTAINER_DIR}/sdcard >> /dev/null 2>&1
+      umount -lvf ${CONTAINER_DIR} >> /dev/null 2>&1
+    done
+    if mountpoint -q ${CONTAINER_DIR}/sdcard;then
+      echo -e "\033[31mError: can not umount container at this time !${COLOR}"
+      return 1
+    fi
+    if mountpoint -q ${CONTAINER_DIR}/dev;then
+      echo -e "\033[31mError: can not umount container at this time !${COLOR}"
+      return 1
+    fi
+    if mountpoint -q ${CONTAINER_DIR}/sys;then
+      echo -e "\033[31mError: can not umount container at this time !${COLOR}"
+      return 1
+    fi
+    if mountpoint -q ${CONTAINER_DIR}/proc;then
+      echo -e "\033[31mError: can not umount container at this time !${COLOR}"
+      return 1
+    fi
+    rm -rvf ${CONTAINER_DIR}
+  else
+    echo -e "\033[31mError: container does not exist !${COLOR}"
+    return
+  fi
 }
 CONTAINER_CONSOLE(){
   while :
