@@ -115,6 +115,37 @@ GET_CPU_ARCH(){
   esac
   return 0
 }
+CONTAINER_CP(){
+  if [[ $1 == *:/* ]];then
+    CONTAINER_NAME=$(echo $1|cut -d ":" -f 1)
+    CONTAINER_PATH=$(echo $1|cut -d ":" -f 2)
+    HOST_PATH=$2
+    CP_MODE=1
+  else
+    CONTAINER_NAME=$(echo $2|cut -d ":" -f 1)
+    CONTAINER_PATH=$(echo $2|cut -d ":" -f 2)
+    HOST_PATH=$1
+    CP_MODE=2
+  fi
+  if [[ -e $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf ]];then
+    source $PREFIX/etc/container/proot/container-${CONTAINER_NAME}.conf
+    if [[ $CP_MODE == 1 ]];then
+      cp ${CONTAINER_DIR}${CONTAINER_PATH} ${HOST_PATH}
+    else
+      cp ${HOST_PATH} ${CONTAINER_DIR}${CONTAINER_PATH}
+    fi
+  elif [[ -e $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf ]];then
+    source $PREFIX/etc/container/chroot/container-${CONTAINER_NAME}.conf
+    if [[ $CP_MODE == 1 ]];then
+      sudo cp ${CONTAINER_DIR}${CONTAINER_PATH} ${HOST_PATH}
+    else
+      sudo cp ${HOST_PATH} ${CONTAINER_DIR}${CONTAINER_PATH}
+    fi
+  else
+    echo -e "\033[31mError: container does not exist !${COLOR}"
+    return
+  fi
+}
 PULL_ROOTFS(){
   OS=$1
   VERSION=$2
@@ -516,7 +547,7 @@ CONTAINER_NEW(){
         "armhf") export CROSS_ARCH=arm&&apt install qemu-user-${CROSS_ARCH};break;;
         "amd64") export CROSS_ARCH=x86_64&&apt install qemu-user-x86-64;break;;
         "ppc64el") export CROSS_ARCH=ppc64&&apt install qemu-user-${CROSS_ARCH};break;;
-        "") export CROSS_ARCH=null&&break;;
+        "") GET_CPU_ARCH&&export CROSS_ARCH=null&&break;;
       esac
     done
   fi
@@ -746,6 +777,7 @@ CONTAINER_CONSOLE_MAIN(){
     "ls") LIST;;
     "exit") echo -e "\nExit.\033[0m"&&exit;;
     "rm") REMOVE_CONTAINER $2;;
+    "cp") CONTAINER_CP $2 $3;;
     "") return;;
     *) echo -e "\033[31mError: Unknow command,type \`help\` to show helps.\033[0m${COLOR}"
   esac
@@ -905,6 +937,7 @@ case $1 in
     "-h") SHOW_USAGE;;
     "-e") EXEC_FUNCTION ${@:2};;
     "-b") CONTAINER_BUILD $2;;
+    "cp") CONTAINER_CP $2 $3;;
     "") CONSOLE_GREETING&&CONTAINER_CONSOLE;;
     *) SHOW_USAGE&&exit 1;;
 esac
