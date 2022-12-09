@@ -8,7 +8,8 @@ clear
 echo -e "${COLOR}\033[?25l╔$(yes "═"|sed $(($WIDTH-2))'q'|tr -d '\n')╗"
 printf "║ \033[1;31m○ \033[1;33m○ \033[1;32m○${COLOR}\033[${WIDTH}G║\n"
 echo -e "\033[?25l║$(yes "═"|sed $(($WIDTH-2))'q'|tr -d '\n')║"
-i=1
+printf "║  TERMUX-CONTAINER\033[${WIDTH}G║\n"
+i=2
 while (( $i<=$HEIGHT ));do
 i=$(($i+1))
 printf "║\033[${WIDTH}G║\n"
@@ -44,6 +45,9 @@ echo -e "\033[20;7H  ● \`任何\`由本程序带来的\`任何形式的\`法�
 echo -e "\033[21;7H  ● 本程序作者保留其著作权，严禁在不遵循其许可的情况下二次分发。"
 echo -e "\033[${HEIGHT};7H Copyright 2022 Moe-hacker"
 HEIGHT=$(($HEIGHT+5))
-echo -e "\033[${HEIGHT};7H \033[1;32m[√]\033[0m${COLOR} 我已阅读并接受许可条款，按回车键同意"
+echo -e "\033[${HEIGHT};7H \033[1;32m[✓]\033[0m${COLOR} 我已阅读并接受许可条款，按回车键同意"
+HEIGHT=$(($HEIGHT+2))
+printf "\033[${HEIGHT};1H"
 read
 printf "\033[?25h"
+clear
